@@ -1,58 +1,97 @@
 import tkinter as tk
-import random 
-import math # Importante para o cálculo da onda
+import random
+import math
+from screeninfo import get_monitors # Biblioteca para detectar os monitores
 
-class SnowOverlay:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
-        self.root.attributes("-transparentcolor", "black") # Mágica
-        self.root.config(bg="black")
-        self.MAX_FLAKES = 50 # Limite máximo de flocos na tela
+class SnowWindow:
+    def __init__(self, master, x, y, width, height):
+        # Usamos Toplevel para criar janelas filhas da raiz principal
+        self.window = tk.Toplevel(master)
+        self.window.overrideredirect(True)
+        self.window.attributes("-topmost", True)
+        self.window.attributes("-transparentcolor", "black")
+        self.window.config(bg="black")
+        
+        # Define a geometria exata para "ESTE" monitor
+        # Formato: "LARGURAxALTURA+POSICAO_X+POSICAO_Y"
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
 
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        self.root.geometry(f"{screen_width}x{screen_height}+0+0")
-
-        self.canvas = tk.Canvas(self.root, bg="black", highlightthickness=0)
+        self.width = width
+        self.height = height
+        area = width * height
+        self.MAX_FLAKES = int(area / 50000)  # ajuste o divisor conforme o gosto
+        
+        self.canvas = tk.Canvas(self.window, bg="black", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
 
         self.flakes = []
-        self.emoji_snow = ["❄️"]
+        self.emoji_snow = ["❄️", "❅", "❆"] # Adicionei mais variações
 
         self.create_flake()
         self.update_flake()
-        self.root.mainloop()
 
     def create_flake(self):
         if len(self.flakes) < self.MAX_FLAKES:
-            x = random.randint(0, self.root.winfo_screenwidth())
+            # Posição X aleatória dentro da largura deste monitor
+            x_pos = random.randint(0, self.width)
             emoji = random.choice(self.emoji_snow)
             size = random.randint(15, 25)
 
-            flake_id = self.canvas.create_text(x, -20, text=emoji, fill="white", font=("Arial", size))
+            # Cria o texto no canvas
+            flake_id = self.canvas.create_text(x_pos, -20, text=emoji, fill="white", font=("Arial", size))
 
             self.flakes.append({
                 "id": flake_id,
                 "speed": random.uniform(2, 4),
                 "angle": random.uniform(0, math.pi * 2),
-                "amplitude": random.uniform(1, 3),        
-                "base_x": x                             
+                "amplitude": random.uniform(1, 3),
             })
 
-        self.root.after(250, self.create_flake)
-    
+        # Agenda a criação do próximo floco nesta janela específica
+        self.window.after(250, self.create_flake)
+
     def update_flake(self):
         for f in self.flakes:
-            f["angle"] += 0.02 
+            f["angle"] += 0.02
             drift = math.sin(f["angle"]) * f["amplitude"]
-            self.canvas.move(f["id"], drift, f["speed"])
-            pos = self.canvas.coords(f["id"])
-            if pos[1] > self.root.winfo_screenheight():
-                self.canvas.coords(f["id"], random.randint(0, self.root.winfo_screenwidth()), -20)
             
-        self.root.after(15, self.update_flake)
+            self.canvas.move(f["id"], drift, f["speed"])
+            
+            pos = self.canvas.coords(f["id"])
+            
+            # Se o floco passar da altura deste monitor, reseta ele lá em cima
+            if pos and pos[1] > self.height:
+                self.canvas.coords(f["id"], random.randint(0, self.width), -20)
+        
+        # Atualiza a animação desta janela
+        self.window.after(15, self.update_flake)
+
+def main():
+    # Cria a janela raiz oculta (necessária para o Tkinter rodar)
+    root = tk.Tk()
+    root.withdraw() # Esconde a janelinha principal vazia
+
+    windows = []
+    
+    try:
+        # Detecta todos os monitores conectados
+        monitors = get_monitors()
+        
+        for m in monitors:
+            print(f"Criando neve no monitor: {m.name} ({m.width}x{m.height} em {m.x},{m.y})")
+            # Cria uma instância de neve para cada monitor
+            snow = SnowWindow(root, m.x, m.y, m.width, m.height)
+            windows.append(snow)
+            
+    except Exception as e:
+        print(f"Erro ao detectar monitores: {e}")
+        # Fallback: Se der erro na biblioteca, tenta criar um na tela principal
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        SnowWindow(root, 0, 0, screen_width, screen_height)
+
+    # Inicia o loop principal que mantém todas as janelas vivas
+    root.mainloop()
 
 if __name__ == "__main__":
-    SnowOverlay()
+    main()
